@@ -1,0 +1,94 @@
+{
+  "configVersion": 2,
+  "packages": [
+    {
+      "name": "bloc",
+      "rootUri": "file:///Users/loipd/.pub-cache/hosted/pub.dev/bloc-8.1.4",
+      "packageUri": "lib/",
+      "languageVersion": "2.12"
+    },
+    {
+      "name": "characters",
+      "rootUri": "file:///Users/loipd/.pub-cache/hosted/pub.dev/characters-1.4.1",
+      "packageUri": "lib/",
+      "languageVersion": "3.4"
+    },
+    {
+      "name": "collection",
+      "rootUri": "file:///Users/loipd/.pub-cache/hosted/pub.dev/collection-1.19.1",
+      "packageUri": "lib/",
+      "languageVersion": "3.4"
+    },
+    {
+      "name": "equatable",
+      "rootUri": "file:///Users/loipd/.pub-cache/hosted/pub.dev/equatable-2.0.8",
+      "packageUri": "lib/",
+      "languageVersion": "2.12"
+    },
+    {
+      "name": "flutter",
+      "rootUri": "file:///opt/homebrew/share/flutter/packages/flutter",
+      "packageUri": "lib/",
+      "languageVersion": "3.9"
+    },
+    {
+      "name": "flutter_bloc",
+      "rootUri": "file:///Users/loipd/.pub-cache/hosted/pub.dev/flutter_bloc-8.1.6",
+      "packageUri": "lib/",
+      "languageVersion": "2.12"
+    },
+    {
+      "name": "material_color_utilities",
+      "rootUri": "file:///Users/loipd/.pub-cache/hosted/pub.dev/material_color_utilities-0.13.0",
+      "packageUri": "lib/",
+      "languageVersion": "3.5"
+    },
+    {
+      "name": "meta",
+      "rootUri": "file:///Users/loipd/.pub-cache/hosted/pub.dev/meta-1.17.0",
+      "packageUri": "lib/",
+      "languageVersion": "3.5"
+    },
+    {
+      "name": "nested",
+      "rootUri": "file:///Users/loipd/.pub-cache/hosted/pub.dev/nested-1.0.0",
+      "packageUri": "lib/",
+      "languageVersion": "2.12"
+    },
+    {
+      "name": "provider",
+      "rootUri": "file:///Users/loipd/.pub-cache/hosted/pub.dev/provider-6.1.5+1",
+      "packageUri": "lib/",
+      "languageVersion": "2.12"
+    },
+    {
+      "name": "sky_engine",
+      "rootUri": "file:///opt/homebrew/share/flutter/bin/cache/pkg/sky_engine",
+      "packageUri": "lib/",
+      "languageVersion": "3.9"
+    },
+    {
+      "name": "smart_bloc",
+      "rootUri": "../../",
+      "packageUri": "lib/",
+      "languageVersion": "3.0"
+    },
+    {
+      "name": "vector_math",
+      "rootUri": "file:///Users/loipd/.pub-cache/hosted/pub.dev/vector_math-2.2.0",
+      "packageUri": "lib/",
+      "languageVersion": "3.1"
+    },
+    {
+      "name": "smart_bloc_example",
+      "rootUri": "../",
+      "packageUri": "lib/",
+      "languageVersion": "3.0"
+    }
+  ],
+  "generator": "pub",
+  "generatorVersion": "3.11.4",
+  "flutterRoot": "file:///opt/homebrew/share/flutter",
+  "flutterVersion": "3.41.6",
+  "pubCache": "file:///Users/loipd/.pub-cache"
+}

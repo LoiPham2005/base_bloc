@@ -1,0 +1,110 @@
+{
+  "roots": [
+    "smart_bloc_example"
+  ],
+  "packages": [
+    {
+      "name": "smart_bloc_example",
+      "version": "1.0.0",
+      "dependencies": [
+        "flutter",
+        "smart_bloc"
+      ],
+      "devDependencies": []
+    },
+    {
+      "name": "smart_bloc",
+      "version": "0.2.0",
+      "dependencies": [
+        "equatable",
+        "flutter",
+        "flutter_bloc"
+      ]
+    },
+    {
+      "name": "flutter",
+      "version": "0.0.0",
+      "dependencies": [
+        "characters",
+        "collection",
+        "material_color_utilities",
+        "meta",
+        "sky_engine",
+        "vector_math"
+      ]
+    },
+    {
+      "name": "equatable",
+      "version": "2.0.8",
+      "dependencies": [
+        "collection",
+        "meta"
+      ]
+    },
+    {
+      "name": "flutter_bloc",
+      "version": "8.1.6",
+      "dependencies": [
+        "bloc",
+        "flutter",
+        "provider"
+      ]
+    },
+    {
+      "name": "sky_engine",
+      "version": "0.0.0",
+      "dependencies": []
+    },
+    {
+      "name": "vector_math",
+      "version": "2.2.0",
+      "dependencies": []
+    },
+    {
+      "name": "meta",
+      "version": "1.17.0",
+      "dependencies": []
+    },
+    {
+      "name": "material_color_utilities",
+      "version": "0.13.0",
+      "dependencies": [
+        "collection"
+      ]
+    },
+    {
+      "name": "collection",
+      "version": "1.19.1",
+      "dependencies": []
+    },
+    {
+      "name": "characters",
+      "version": "1.4.1",
+      "dependencies": []
+    },
+    {
+      "name": "provider",
+      "version": "6.1.5+1",
+      "dependencies": [
+        "collection",
+        "flutter",
+        "nested"
+      ]
+    },
+    {
+      "name": "bloc",
+      "version": "8.1.4",
+      "dependencies": [
+        "meta"
+      ]
+    },
+    {
+      "name": "nested",
+      "version": "1.0.0",
+      "dependencies": [
+        "flutter"
+      ]
+    }
+  ],
+  "configVersion": 1
+}

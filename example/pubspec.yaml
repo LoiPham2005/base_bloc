@@ -1,0 +1,14 @@
+name: smart_bloc_example
+description: Example app demonstrating the smart_bloc package.
+publish_to: none
+version: 1.0.0
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+  flutter: ">=3.10.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  smart_bloc:
+    path: ../

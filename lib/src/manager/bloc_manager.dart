@@ -118,6 +118,10 @@ class BlocManager {
   /// [keepAlive], when set, keeps the instance warm for that duration after
   /// its last lease is released, instead of closing immediately.
   ///
+  /// A factory ([override], [create] or the DI factory) is only needed when an
+  /// instance has to be built. Acquiring an instance that is already live —
+  /// a child widget sharing what its parent created — requires none of them.
+  ///
   /// [onCreate] runs exactly once — only when this call actually creates a new
   /// instance, never on a shared or warm-reused one (put your initial `load()`
   /// here). [onClose] runs exactly once, right before the instance is closed.
@@ -134,15 +138,20 @@ class BlocManager {
   }) {
     final cacheKey = _cacheKey<T>(key);
     final override = _overrides[cacheKey];
-    assert(
-      override != null || create != null || _diFactory != null,
-      'BlocManager.acquire<$T>: no override, no `create`, and no DI factory. '
-      'Pass create: () => ..., register BlocManager.setFactory(), or override in tests.',
-    );
 
     var entry = _entries[cacheKey];
     var created = false;
     if (entry == null || entry.bloc.isClosed) {
+      // A factory is only required when we actually have to build an instance —
+      // acquiring an already-live one (e.g. a child widget sharing the instance
+      // its parent created) needs nothing.
+      if (override == null && create == null && _diFactory == null) {
+        throw StateError(
+          'BlocManager.acquire<$T>: no live instance for this scope and no way '
+          'to create one. Pass create: () => ..., register '
+          'BlocManager.setFactory(), or override it in tests.',
+        );
+      }
       final BlocBase<Object?> bloc = override != null
           ? override()
           : (create != null ? create() : _diFactory!<T>());

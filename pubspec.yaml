@@ -3,7 +3,7 @@ description: >-
   Codegen-free BLoC/Cubit layer for Flutter: sealed async state, query/mutate
   with stale-result protection, one-shot UI effects, and ref-counted
   autoDispose lifecycle.
-version: 0.3.1
+version: 0.3.2
 homepage: https://github.com/LoiPham2005/smart_bloc
 repository: https://github.com/LoiPham2005/smart_bloc
 issue_tracker: https://github.com/LoiPham2005/smart_bloc/issues

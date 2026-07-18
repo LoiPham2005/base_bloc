@@ -55,6 +55,33 @@ void main() {
       tab2.release();
     });
 
+    test('acquiring an already-live instance needs no factory at all', () {
+      final owner = BlocManager.acquire<CounterCubit>(create: CounterCubit.new);
+
+      // A child widget sharing the parent's instance has nothing to create.
+      final consumer = BlocManager.acquire<CounterCubit>();
+      expect(identical(consumer.bloc, owner.bloc), isTrue);
+      expect(BlocManager.debugSnapshot.values.single.refs, 2);
+
+      consumer.release();
+      expect(owner.bloc.isClosed, isFalse);
+      owner.release();
+      expect(owner.bloc.isClosed, isTrue);
+    });
+
+    test('throws a clear error when nothing exists and nothing can create', () {
+      expect(
+        () => BlocManager.acquire<CounterCubit>(),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('no live instance'),
+          ),
+        ),
+      );
+    });
+
     test('uses the registered DI factory when no create is given', () {
       BlocManager.setFactory(<T extends BlocBase<Object?>>() {
         if (T == CounterCubit) return CounterCubit() as T;

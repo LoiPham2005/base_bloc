@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.3.2
+
+### Fixed
+
+- **`BlocManager.acquire` demanded a factory even when the instance already
+  existed.** The `create`/DI assertion ran before the cache lookup, so a child
+  widget sharing the instance its parent created was forced to pass a redundant
+  `create:` (and `AutoStateBuilder`/`AutoBloc*` inherited that). The check now
+  runs only when an instance actually has to be built, and raises a clear
+  `StateError` instead of a bare assertion.
+
+  ```dart
+  AutoBlocProvider<CartCubit>(create: CartCubit.new, child: ...);
+  // child widget — no `create` needed anymore:
+  AutoStateBuilder<CartCubit, Cart>(data: (context, cart) => ...);
+  ```
+
 ## 0.3.1
 
 - Shorten the pubspec `description` to fit pub.dev's 60–180 character range

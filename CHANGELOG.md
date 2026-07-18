@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.3.0
+
+Closes the practical gaps vs Riverpod codegen — all without a build step.
+
+### Added
+
+- **`SmartComputed<T>`** — derived, read-only state computed from one or more
+  source blocs; recomputes on any source change, errors become `ErrorState`.
+  smart_bloc's answer to Riverpod derived providers (explicit dependencies).
+- **`SmartPaginatedCubit<E>` + `Page<E>`** — infinite-scroll lists: `loadFirst`
+  replaces page one, `loadMore` appends and tracks `hasMore`; load-more failures
+  keep the list and surface a one-shot message (footer spinner via
+  `state.isMutating`).
+- **`BlocManager` keepAlive** — `acquire(keepAlive: Duration)` keeps an instance
+  warm for a grace period after its last lease is released, so quick
+  back-navigation reuses it instead of re-creating (Riverpod `keepAlive`).
+- **`BlocManager.override` / `clearOverrides`** — inject fakes per type in tests
+  (Riverpod-style provider override).
+- **`BlocFamily<B, Arg>`** — typed, parameterized instance factory over
+  `BlocManager` scopes (Riverpod `family`), with optional `keepAlive`.
+
 ## 0.2.0
 
 Ground-up rewrite. Breaking release.

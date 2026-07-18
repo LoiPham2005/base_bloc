@@ -1,3 +1,4 @@
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:smart_bloc/smart_bloc.dart';
 
@@ -10,6 +11,7 @@ void main() {
   tearDown(() {
     BlocManager.disposeAll();
     BlocManager.clearFactory();
+    BlocManager.clearOverrides();
   });
 
   group('acquire / release', () {
@@ -108,6 +110,100 @@ void main() {
 
       lease.release();
       expect(BlocManager.peek<CounterCubit>(), isNull);
+    });
+  });
+
+  group('keepAlive', () {
+    test('keeps instance warm after last release, closes after the TTL', () {
+      fakeAsync((async) {
+        final lease = BlocManager.acquire<CounterCubit>(
+          create: CounterCubit.new,
+          keepAlive: const Duration(minutes: 1),
+        );
+        final bloc = lease.bloc;
+
+        lease.release();
+        expect(bloc.isClosed, isFalse); // warm, not closed
+        expect(BlocManager.debugSnapshot['CounterCubit']?.keptWarm, isTrue);
+
+        async.elapse(const Duration(seconds: 59));
+        expect(bloc.isClosed, isFalse);
+
+        async.elapse(const Duration(seconds: 2));
+        expect(bloc.isClosed, isTrue); // closed after grace period
+        expect(BlocManager.debugSnapshot, isEmpty);
+      });
+    });
+
+    test('re-acquire within the window reuses the warm instance', () {
+      fakeAsync((async) {
+        final first = BlocManager.acquire<CounterCubit>(
+          create: CounterCubit.new,
+          keepAlive: const Duration(minutes: 1),
+        );
+        final bloc = first.bloc;
+        first.release();
+
+        async.elapse(const Duration(seconds: 30));
+        final again = BlocManager.acquire<CounterCubit>(create: CounterCubit.new);
+        expect(identical(again.bloc, bloc), isTrue); // reused, not re-created
+        expect(bloc.isClosed, isFalse);
+
+        // Timer was cancelled — instance survives past the original TTL.
+        async.elapse(const Duration(minutes: 5));
+        expect(bloc.isClosed, isFalse);
+
+        again.release();
+        async.elapse(const Duration(minutes: 2));
+        expect(bloc.isClosed, isTrue);
+      });
+    });
+  });
+
+  group('override', () {
+    test('injects a fake regardless of create/DI', () {
+      BlocManager.override<CounterCubit>(() => CounterCubit()..setData(99));
+
+      final lease = BlocManager.acquire<CounterCubit>(create: CounterCubit.new);
+      expect(lease.bloc.state.data, 99); // fake won, not the real create
+      lease.release();
+
+      BlocManager.clearOverrides();
+      final real = BlocManager.acquire<CounterCubit>(create: CounterCubit.new);
+      expect(real.bloc.state.data, 0);
+      real.release();
+    });
+  });
+
+  group('BlocFamily', () {
+    test('one instance per arg, shared within an arg', () {
+      final family = BlocFamily<CounterCubit, int>((n) => CounterCubit()..setData(n));
+
+      final l1 = family.acquire(1);
+      final l2 = family.acquire(2);
+      final l1b = family.acquire(1);
+
+      expect(l1.bloc.state.data, 1);
+      expect(l2.bloc.state.data, 2);
+      expect(identical(l1.bloc, l2.bloc), isFalse); // different arg → different
+      expect(identical(l1.bloc, l1b.bloc), isTrue); // same arg → shared
+
+      l1.release();
+      expect(l1.bloc.isClosed, isFalse); // still leased by l1b
+      l1b.release();
+      expect(l1.bloc.isClosed, isTrue);
+      l2.release();
+    });
+
+    test('custom keyOf resolves complex args', () {
+      final family = BlocFamily<CounterCubit, ({int a, int b})>(
+        (arg) => CounterCubit()..setData(arg.a + arg.b),
+        keyOf: (arg) => '${arg.a}-${arg.b}',
+      );
+      final lease = family.acquire((a: 2, b: 3));
+      expect(lease.bloc.state.data, 5);
+      expect(family.keyFor((a: 2, b: 3)), '2-3');
+      lease.release();
     });
   });
 }

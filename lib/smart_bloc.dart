@@ -9,7 +9,9 @@
 /// - `SmartCubit` & `SmartBloc` — typed query/mutate with stale-result
 ///   protection, mutation tracking, and one-shot `UiMessage`s
 /// - `BlocManager` — generation-safe, ref-counted lifecycle (autoDispose +
-///   family without codegen)
+///   `keepAlive` + test `override`); `BlocFamily` for typed parameterized scopes
+/// - `SmartComputed` — derived state from other blocs (no codegen)
+/// - `SmartPaginatedCubit` — infinite-scroll list with `loadMore`
 /// - `AutoStateBuilder` — data-first screen builder with global defaults
 /// - `AutoBlocBuilder`/`AutoBlocConsumer`/`AutoBlocListener`/`AutoBlocSelector`
 ///   /`AutoBlocProvider` — lease-managed widget integration
@@ -29,6 +31,7 @@ library smart_bloc;
 export 'package:flutter_bloc/flutter_bloc.dart';
 
 export 'src/bloc/smart_bloc.dart';
+export 'src/computed/smart_computed.dart';
 export 'src/core/config.dart';
 export 'src/core/exec.dart' show BlocSubscriptions, ExecMode, SmartExec;
 export 'src/cubit/smart_cubit.dart';
@@ -36,7 +39,9 @@ export 'src/effects/messenger.dart';
 export 'src/effects/ui_message.dart';
 export 'src/errors/failures.dart';
 export 'src/errors/result.dart';
+export 'src/manager/bloc_family.dart';
 export 'src/manager/bloc_manager.dart';
+export 'src/pagination/paginated_cubit.dart';
 export 'src/state/base_state.dart';
 export 'src/widgets/auto_bloc.dart';
 export 'src/widgets/defaults.dart';

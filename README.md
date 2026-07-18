@@ -45,11 +45,18 @@ classes, no `build_runner`, no manual `dispose`.
 |---|---|---|
 | Build step | **None** — pure Dart/Flutter | `build_runner watch` always running |
 | Async state | `BaseState<T>` sealed union, **data is non-nullable** in `DataState` | `AsyncValue<T>` |
-| Auto-dispose | `BlocManager` leases (ref-counted) | `@riverpod` autoDispose |
-| Scoped/param instances | `scopeKey` (`family` without codegen) | `family` (codegen) |
+| Auto-dispose | `BlocManager` leases (ref-counted) + `keepAlive` | `@riverpod` autoDispose / `keepAlive` |
+| Scoped/param instances | `BlocFamily` / `scopeKey` (no codegen) | `family` (codegen) |
+| Derived state | `SmartComputed` (explicit sources) | derived `@riverpod` (implicit `ref.watch`) |
+| Pagination | `SmartPaginatedCubit` (`loadMore`/`hasMore`) | manual `AsyncNotifier` |
 | Mutations | first-class `mutate()` — data stays on screen, errors are one-shot | manual `AsyncNotifier` + `ref.listen` |
 | One-shot effects | `UiMessage` / `Effect` streams (snackbars/nav that don't replay) | manual `ref.listen` plumbing |
+| Testing | `BlocManager.override` + `bloc_test` | `ProviderContainer` overrides |
 | Tooling | full `flutter_bloc` + `bloc` devtools/observer | Riverpod devtools |
+
+> The one thing smart_bloc deliberately does **not** copy is Riverpod's
+> *implicit* reactive graph (automatic `ref.watch` dependency tracking).
+> `SmartComputed` takes explicit sources instead — no magic, no build step.
 
 If your team already thinks in blocs, or you simply don't want a code generator
 in the loop, smart_bloc gives you the modern feature set on top of the mature
@@ -211,6 +218,66 @@ Register a DI factory once and drop the inline `create`:
 ```dart
 BlocManager.setFactory(<T extends BlocBase<Object?>>() => getIt<T>());
 final auth = BlocManager.acquire<AuthCubit>(); // from GetIt
+```
+
+**`keepAlive`** keeps an instance warm after its last lease drops, so quick
+back-navigation reuses it instead of re-fetching:
+
+```dart
+AutoStateBuilder<FeedCubit, List<Post>>(
+  create: FeedCubit.new,
+  // acquire is called internally; pass keepAlive via BlocManager for manual leases:
+)
+BlocManager.acquire<FeedCubit>(create: FeedCubit.new, keepAlive: const Duration(minutes: 5));
+```
+
+**`BlocFamily`** — typed, parameterized instances (Riverpod's `family`):
+
+```dart
+final productDetail = BlocFamily<ProductCubit, String>((id) => ProductCubit(id));
+final lease = productDetail.acquire(productId); // one instance per id, auto-disposed
+```
+
+**Testing** — inject fakes with `override`:
+
+```dart
+setUp(() => BlocManager.override<AuthCubit>(() => FakeAuthCubit()));
+tearDown(BlocManager.clearOverrides);
+```
+
+### `SmartComputed` — derived state
+
+Recomputes from explicit source blocs whenever any of them changes (equal
+results aren't re-emitted):
+
+```dart
+class CartTotalCubit extends SmartComputed<int> {
+  CartTotalCubit(CartCubit cart)
+      : super(sources: [cart], compute: () => cart.state.dataOrNull?.total ?? 0);
+}
+// or inline:
+final total = SmartComputed<int>(sources: [cart], compute: () => ...);
+```
+
+### `SmartPaginatedCubit` — infinite scroll
+
+`loadFirst` loads page one; `loadMore` appends and tracks `hasMore`. A load-more
+failure keeps the list and surfaces a one-shot message; footer spinner reads
+`state.isMutating`.
+
+```dart
+class FeedCubit extends SmartPaginatedCubit<Post> {
+  FeedCubit(this._repo);
+  final FeedRepository _repo;
+  int _page = 1;
+
+  Future<void> load()  { _page = 1; return loadFirst(() => _repo.page(_page)); }
+  Future<void> more()  => loadMore(() => _repo.page(++_page));
+}
+
+// repository returns a Page:
+Future<Result<Page<Post>>> page(int p) =>
+    Result.guard(() async => Page(await _api.feed(p), hasMore: p < lastPage));
 ```
 
 ### `Result<T>` & `Failure`

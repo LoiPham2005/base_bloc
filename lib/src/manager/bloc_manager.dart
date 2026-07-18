@@ -1,16 +1,19 @@
+import 'dart:async';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 /// A ref-counted handle on a [BlocManager]-owned instance.
 ///
 /// Acquire with [BlocManager.acquire]; call [release] exactly once when done
 /// (extra calls are safe no-ops). When the last lease for an instance is
-/// released, the instance is closed and evicted.
+/// released, the instance is closed and evicted — unless a `keepAlive` grace
+/// period was requested, in which case it lingers (warm) until the timer
+/// fires or it is re-acquired.
 ///
 /// Leases are generation-tagged: if the underlying instance is replaced (for
 /// example it was closed externally and re-created by a newer acquire), stale
 /// leases become inert — releasing them can never close or corrupt the
-/// ref-count of the replacement instance. This fixes the classic ref-count
-/// desync of raw `get`/`release` pairs.
+/// ref-count of the replacement instance.
 class BlocLease<T extends BlocBase<Object?>> {
   /// The managed instance.
   final T bloc;
@@ -35,16 +38,19 @@ class BlocLease<T extends BlocBase<Object?>> {
 class _Entry {
   final BlocBase<Object?> bloc;
   final int generation;
+  Duration? keepAlive;
+  Timer? disposeTimer;
   int refs = 0;
 
-  _Entry(this.bloc, this.generation);
+  _Entry(this.bloc, this.generation, this.keepAlive);
 }
 
 /// Ref-counted lifecycle manager for [BlocBase] instances — smart_bloc's
 /// answer to Riverpod's `autoDispose`: an instance lives exactly as long as
 /// at least one widget (or manual lease) uses it, then closes automatically.
 ///
-/// Scoped instances of the same type — Riverpod `family` — use a `key`:
+/// Scoped instances of the same type — Riverpod `family` — use a `key` (or the
+/// typed `BlocFamily` wrapper):
 ///
 /// ```dart
 /// final tab1 = BlocManager.acquire<TabCubit>(key: 'tab1', create: () => TabCubit(1));
@@ -53,19 +59,24 @@ class _Entry {
 /// tab2.release();
 /// ```
 ///
-/// Optionally register a DI factory once at startup so `acquire` can create
-/// instances without an inline `create`:
+/// `keepAlive` keeps an instance warm for a grace period after its last lease
+/// is released (Riverpod's `keepAlive`), so quick back-navigation reuses it
+/// instead of re-fetching:
 ///
 /// ```dart
-/// BlocManager.setFactory(<T extends BlocBase<Object?>>() => getIt<T>());
-/// final auth = BlocManager.acquire<AuthCubit>();
+/// BlocManager.acquire<FeedCubit>(create: FeedCubit.new, keepAlive: const Duration(minutes: 5));
 /// ```
+///
+/// In tests, [override] injects a fake for a type regardless of `create`/DI.
 class BlocManager {
   BlocManager._();
 
   static final Map<String, _Entry> _entries = {};
+  static final Map<String, BlocBase<Object?> Function()> _overrides = {};
   static int _generationCounter = 0;
   static T Function<T extends BlocBase<Object?>>()? _diFactory;
+
+  // ── DI setup ──────────────────────────────────────────────────────────────
 
   /// Registers a DI factory used by [acquire] when no `create` is given.
   static void setFactory(T Function<T extends BlocBase<Object?>>() factory) {
@@ -75,29 +86,61 @@ class BlocManager {
   /// Removes a previously registered DI factory (useful in tests).
   static void clearFactory() => _diFactory = null;
 
+  // ── Test overrides ──────────────────────────────────────────────────────────
+
+  /// Overrides how instances of [T] (per [key]) are created — [acquire] will
+  /// use [factory] instead of any `create`/DI factory. For tests:
+  ///
+  /// ```dart
+  /// BlocManager.override<AuthCubit>(() => FakeAuthCubit());
+  /// ```
+  static void override<T extends BlocBase<Object?>>(T Function() factory, {String? key}) {
+    _overrides[_cacheKey<T>(key)] = factory;
+  }
+
+  /// Clears all [override]s (call in test teardown).
+  static void clearOverrides() => _overrides.clear();
+
+  // ── Internals ───────────────────────────────────────────────────────────────
+
   static String _cacheKey<T>(String? key) => key == null ? '$T' : '$T#$key';
 
+  // ── Public API ──────────────────────────────────────────────────────────────
+
   /// Acquires a lease on the shared instance of [T] (per [key] scope),
-  /// creating it if absent via [create] or the registered DI factory.
+  /// creating it if absent via an [override], [create], or the registered DI
+  /// factory (in that precedence).
   ///
-  /// An instance found closed (closed externally, e.g. by `disposeAll`) is
-  /// replaced with a fresh one; leases on the dead instance become inert.
+  /// [keepAlive], when set, keeps the instance warm for that duration after
+  /// its last lease is released, instead of closing immediately.
+  ///
+  /// An instance found closed (e.g. by [disposeAll]) is replaced with a fresh
+  /// one; leases on the dead instance become inert.
   static BlocLease<T> acquire<T extends BlocBase<Object?>>({
     String? key,
     T Function()? create,
+    Duration? keepAlive,
   }) {
-    assert(
-      create != null || _diFactory != null,
-      'BlocManager.acquire<$T>: no `create` given and no DI factory set. '
-      'Pass create: () => ..., or call BlocManager.setFactory() at startup.',
-    );
     final cacheKey = _cacheKey<T>(key);
+    final override = _overrides[cacheKey];
+    assert(
+      override != null || create != null || _diFactory != null,
+      'BlocManager.acquire<$T>: no override, no `create`, and no DI factory. '
+      'Pass create: () => ..., register BlocManager.setFactory(), or override in tests.',
+    );
 
     var entry = _entries[cacheKey];
     if (entry == null || entry.bloc.isClosed) {
-      final bloc = create != null ? create() : _diFactory!<T>();
-      entry = _Entry(bloc, ++_generationCounter);
+      final BlocBase<Object?> bloc = override != null
+          ? override()
+          : (create != null ? create() : _diFactory!<T>());
+      entry = _Entry(bloc, ++_generationCounter, keepAlive);
       _entries[cacheKey] = entry;
+    } else {
+      // Warm re-acquire: cancel any pending keepAlive disposal.
+      entry.disposeTimer?.cancel();
+      entry.disposeTimer = null;
+      if (keepAlive != null) entry.keepAlive = keepAlive;
     }
 
     entry.refs++;
@@ -110,10 +153,24 @@ class BlocManager {
     if (entry == null || entry.generation != generation) return;
 
     entry.refs--;
-    if (entry.refs <= 0) {
-      _entries.remove(cacheKey);
-      if (!entry.bloc.isClosed) entry.bloc.close();
+    if (entry.refs > 0) return;
+
+    final keepAlive = entry.keepAlive;
+    if (keepAlive != null && keepAlive > Duration.zero && !entry.bloc.isClosed) {
+      entry.disposeTimer?.cancel();
+      entry.disposeTimer = Timer(keepAlive, () => _evict(cacheKey, generation));
+    } else {
+      _evict(cacheKey, generation);
     }
+  }
+
+  static void _evict(String cacheKey, int generation) {
+    final entry = _entries[cacheKey];
+    if (entry == null || entry.generation != generation) return;
+    if (entry.refs > 0) return; // re-acquired during the keepAlive window
+    entry.disposeTimer?.cancel();
+    _entries.remove(cacheKey);
+    if (!entry.bloc.isClosed) entry.bloc.close();
   }
 
   /// Returns the live instance of [T] without acquiring a lease, or `null`
@@ -133,13 +190,22 @@ class BlocManager {
     final entries = List.of(_entries.values);
     _entries.clear();
     for (final entry in entries) {
+      entry.disposeTimer?.cancel();
       if (!entry.bloc.isClosed) entry.bloc.close();
     }
   }
 
-  /// Debug snapshot: cache key → (refs, generation, isClosed).
-  static Map<String, ({int refs, int generation, bool isClosed})> get debugSnapshot => {
-        for (final MapEntry(:key, :value) in _entries.entries)
-          key: (refs: value.refs, generation: value.generation, isClosed: value.bloc.isClosed),
-      };
+  // ── Debug ───────────────────────────────────────────────────────────────────
+
+  /// Debug snapshot: cache key → (refs, generation, isClosed, keptWarm).
+  static Map<String, ({int refs, int generation, bool isClosed, bool keptWarm})>
+      get debugSnapshot => {
+            for (final MapEntry(:key, :value) in _entries.entries)
+              key: (
+                refs: value.refs,
+                generation: value.generation,
+                isClosed: value.bloc.isClosed,
+                keptWarm: value.refs == 0 && value.disposeTimer != null,
+              ),
+          };
 }

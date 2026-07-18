@@ -160,6 +160,58 @@ void main() {
     });
   });
 
+  group('onCreate / onClose', () {
+    test('onCreate fires once per instance, not per acquire', () {
+      var creates = 0;
+      final l1 = BlocManager.acquire<CounterCubit>(
+        create: CounterCubit.new,
+        onCreate: (_) => creates++,
+      );
+      final l2 = BlocManager.acquire<CounterCubit>(
+        create: CounterCubit.new,
+        onCreate: (_) => creates++,
+      );
+
+      expect(creates, 1); // shared instance → onCreate once
+      l1.release();
+      l2.release();
+    });
+
+    test('onClose fires once, right before the instance closes', () {
+      final closed = <int?>[];
+      final lease = BlocManager.acquire<CounterCubit>(
+        create: () => CounterCubit()..setData(7),
+        onClose: (c) => closed.add(c.state.data), // instance still open here
+      );
+
+      lease.release();
+      expect(closed, [7]);
+    });
+
+    test('onClose fires after the keepAlive TTL', () {
+      fakeAsync((async) {
+        var closes = 0;
+        final lease = BlocManager.acquire<CounterCubit>(
+          create: CounterCubit.new,
+          keepAlive: const Duration(minutes: 1),
+          onClose: (_) => closes++,
+        );
+        lease.release();
+        expect(closes, 0); // warm
+
+        async.elapse(const Duration(minutes: 2));
+        expect(closes, 1);
+      });
+    });
+
+    test('disposeAll runs onClose for every instance', () {
+      var closes = 0;
+      BlocManager.acquire<CounterCubit>(create: CounterCubit.new, onClose: (_) => closes++);
+      BlocManager.disposeAll();
+      expect(closes, 1);
+    });
+  });
+
   group('override', () {
     test('injects a fake regardless of create/DI', () {
       BlocManager.override<CounterCubit>(() => CounterCubit()..setData(99));

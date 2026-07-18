@@ -14,7 +14,7 @@ import 'effect_listener.dart';
 /// ```dart
 /// AutoStateBuilder<PostCubit, List<Post>>(
 ///   create: () => PostCubit(repo),
-///   onInit: (c) => c.load(),
+///   onCreate: (c) => c.load(), // once per instance — safe with sharing/keepAlive
 ///   data: (context, posts) => PostListView(posts),
 /// )
 /// ```
@@ -61,15 +61,31 @@ class AutoStateBuilder<C extends SmartCubit<T>, T> extends StatefulWidget {
   final bool listenMessages;
 
   /// Scope key — independent instances of the same cubit type (family).
+  ///
+  /// Vary this to get one instance per argument; do **not** rely on changing
+  /// [create], which only runs on first acquisition of a given key.
   final String? scopeKey;
 
   /// Inline factory; omit to use the [BlocManager.setFactory] DI factory.
+  /// Only runs on first acquisition of this type+[scopeKey].
   final C Function()? create;
 
-  /// Called once per leased instance — kick off the first load here.
+  /// Keeps the cubit warm this long after the last lease is released, so a
+  /// quick remount reuses it (and its data) instead of re-creating and
+  /// re-fetching.
+  final Duration? keepAlive;
+
+  /// Runs once, when the cubit is first created (not on shared/warm reuse) —
+  /// kick off the first load here so it never double-fires.
+  final void Function(C cubit)? onCreate;
+
+  /// Runs once, right before the cubit is closed.
+  final void Function(C cubit)? onClose;
+
+  /// Runs every time this widget mounts (per widget, not per instance).
   final void Function(C cubit)? onInit;
 
-  /// Called right before the lease is released.
+  /// Runs every time this widget unmounts (per widget, not per instance).
   final void Function(C cubit)? onDispose;
 
   const AutoStateBuilder({
@@ -84,6 +100,9 @@ class AutoStateBuilder<C extends SmartCubit<T>, T> extends StatefulWidget {
     this.listenMessages = false,
     this.scopeKey,
     this.create,
+    this.keepAlive,
+    this.onCreate,
+    this.onClose,
     this.onInit,
     this.onDispose,
   });
@@ -105,7 +124,13 @@ class _AutoStateBuilderState<C extends SmartCubit<T>, T>
   }
 
   void _acquire() {
-    _lease = BlocManager.acquire<C>(key: widget.scopeKey, create: widget.create);
+    _lease = BlocManager.acquire<C>(
+      key: widget.scopeKey,
+      create: widget.create,
+      keepAlive: widget.keepAlive,
+      onCreate: widget.onCreate,
+      onClose: widget.onClose,
+    );
     widget.onInit?.call(cubit);
   }
 

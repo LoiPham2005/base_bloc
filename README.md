@@ -26,7 +26,7 @@ class PostCubit extends SmartCubit<List<Post>> {
 ```dart
 AutoStateBuilder<PostCubit, List<Post>>(
   create: () => PostCubit(repo),
-  onInit: (c) => c.load(),
+  onCreate: (c) => c.load(),                  // once per instance (not per rebuild)
   listenMessages: true,                       // one-shot snackbars
   data: (context, posts) => PostListView(posts),
   // loading / error / empty come from SmartBlocDefaults — override per-call if needed
@@ -199,10 +199,18 @@ AutoBlocProvider<AuthCubit>(create: () => AuthCubit(repo), child: AppShell())
 AutoStateBuilder<TabCubit, TabData>(
   scopeKey: 'tab-$id',                 // one cubit per tab, auto-closed
   create: () => TabCubit(id),
-  onInit: (c) => c.load(),
+  onCreate: (c) => c.load(),
   data: (context, data) => TabView(data),
 )
 ```
+
+> **Lifecycle callbacks come in two tiers.** `onCreate` / `onClose` run **once
+> per instance** — put your initial `load()` in `onCreate` and it won't
+> double-fire when the cubit is shared by two widgets or kept warm by
+> `keepAlive`. `onInit` / `onDispose` run **per widget mount/unmount** (use them
+> for analytics, focus, etc.). And `create` only runs on first acquisition of a
+> `scopeKey` — to get a fresh instance per argument, vary `scopeKey`, not
+> `create`.
 
 Manual leases when you need them (idempotent, generation-safe — double-release
 and external close can't corrupt the ref-count, a v1 bug):

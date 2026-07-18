@@ -20,6 +20,20 @@ Closes the practical gaps vs Riverpod codegen — all without a build step.
   (Riverpod-style provider override).
 - **`BlocFamily<B, Arg>`** — typed, parameterized instance factory over
   `BlocManager` scopes (Riverpod `family`), with optional `keepAlive`.
+- **Per-instance lifecycle hooks** on `BlocManager.acquire` and all `AutoBloc*`
+  widgets + `AutoStateBuilder`: `onCreate` (runs once when the instance is
+  created) and `onClose` (once before it closes) — put your initial `load()` in
+  `onCreate` so it no longer double-fires when an instance is shared by two
+  widgets or kept warm by `keepAlive`. The existing `onInit`/`onDispose` remain
+  as per-widget-mount hooks.
+- `keepAlive` is now plumbed through every `AutoBloc*` widget and
+  `AutoStateBuilder`, not just manual `BlocManager.acquire`.
+
+### Notes
+
+- `create` only runs on first acquisition of a given type+`scopeKey`; changing
+  the closure does not recreate the instance. Vary `scopeKey` to key by
+  argument (now documented on the widgets).
 
 ## 0.2.0
 

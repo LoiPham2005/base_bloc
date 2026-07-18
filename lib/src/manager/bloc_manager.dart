@@ -40,6 +40,10 @@ class _Entry {
   final int generation;
   Duration? keepAlive;
   Timer? disposeTimer;
+
+  /// Runs once, right before this instance is closed. Set by the acquire that
+  /// created it; instance-scoped, not widget-scoped.
+  void Function(BlocBase<Object?> bloc)? onClose;
   int refs = 0;
 
   _Entry(this.bloc, this.generation, this.keepAlive);
@@ -114,12 +118,19 @@ class BlocManager {
   /// [keepAlive], when set, keeps the instance warm for that duration after
   /// its last lease is released, instead of closing immediately.
   ///
+  /// [onCreate] runs exactly once — only when this call actually creates a new
+  /// instance, never on a shared or warm-reused one (put your initial `load()`
+  /// here). [onClose] runs exactly once, right before the instance is closed.
+  /// Both are instance-scoped, so keep them free of per-widget/UI state.
+  ///
   /// An instance found closed (e.g. by [disposeAll]) is replaced with a fresh
   /// one; leases on the dead instance become inert.
   static BlocLease<T> acquire<T extends BlocBase<Object?>>({
     String? key,
     T Function()? create,
     Duration? keepAlive,
+    void Function(T bloc)? onCreate,
+    void Function(T bloc)? onClose,
   }) {
     final cacheKey = _cacheKey<T>(key);
     final override = _overrides[cacheKey];
@@ -130,12 +141,15 @@ class BlocManager {
     );
 
     var entry = _entries[cacheKey];
+    var created = false;
     if (entry == null || entry.bloc.isClosed) {
       final BlocBase<Object?> bloc = override != null
           ? override()
           : (create != null ? create() : _diFactory!<T>());
       entry = _Entry(bloc, ++_generationCounter, keepAlive);
+      if (onClose != null) entry.onClose = (b) => onClose(b as T);
       _entries[cacheKey] = entry;
+      created = true;
     } else {
       // Warm re-acquire: cancel any pending keepAlive disposal.
       entry.disposeTimer?.cancel();
@@ -144,7 +158,9 @@ class BlocManager {
     }
 
     entry.refs++;
-    return BlocLease._(entry.bloc as T, cacheKey, entry.generation);
+    final bloc = entry.bloc as T;
+    if (created && onCreate != null) onCreate(bloc);
+    return BlocLease._(bloc, cacheKey, entry.generation);
   }
 
   static void _release(String cacheKey, int generation) {
@@ -170,7 +186,10 @@ class BlocManager {
     if (entry.refs > 0) return; // re-acquired during the keepAlive window
     entry.disposeTimer?.cancel();
     _entries.remove(cacheKey);
-    if (!entry.bloc.isClosed) entry.bloc.close();
+    if (!entry.bloc.isClosed) {
+      entry.onClose?.call(entry.bloc);
+      entry.bloc.close();
+    }
   }
 
   /// Returns the live instance of [T] without acquiring a lease, or `null`
@@ -191,7 +210,10 @@ class BlocManager {
     _entries.clear();
     for (final entry in entries) {
       entry.disposeTimer?.cancel();
-      if (!entry.bloc.isClosed) entry.bloc.close();
+      if (!entry.bloc.isClosed) {
+        entry.onClose?.call(entry.bloc);
+        entry.bloc.close();
+      }
     }
   }
 

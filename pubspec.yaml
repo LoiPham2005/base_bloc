@@ -5,9 +5,9 @@ description: >
   generation-safe ref-counted lifecycle (BlocManager), and batteries-included
   widgets — autoDispose and family ergonomics without build_runner.
 version: 0.3.0
-# TODO: fill in before publishing to pub.dev
-# homepage: https://github.com/YOUR_GITHUB/smart_bloc
-# repository: https://github.com/YOUR_GITHUB/smart_bloc
+homepage: https://github.com/LoiPham2005/base_bloc
+repository: https://github.com/LoiPham2005/base_bloc
+issue_tracker: https://github.com/LoiPham2005/base_bloc/issues
 
 environment:
   sdk: ">=3.0.0 <4.0.0"

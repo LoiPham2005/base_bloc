@@ -82,7 +82,7 @@ class PostPage extends StatelessWidget {
       // default loading/error/empty UIs, and surfaces one-shot messages.
       body: AutoStateBuilder<PostCubit, List<Post>>(
         create: () => PostCubit(PostRepository()),
-        onInit: (cubit) => cubit.load(),
+        onCreate: (cubit) => cubit.load(), // once per instance
         listenMessages: true,
         data: (context, posts) => RefreshIndicator(
           onRefresh: () => context.read<PostCubit>().refresh(),

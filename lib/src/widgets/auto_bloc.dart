@@ -3,18 +3,32 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../manager/bloc_manager.dart';
 
-/// Shared lease lifecycle for all `AutoBloc*` widgets:
+/// Shared lease lifecycle for all `AutoBloc*` widgets.
 ///
-/// - `initState` — acquires a [BlocLease] from [BlocManager] (creating the
-///   instance on first use) and calls `onInit`.
-/// - `didUpdateWidget` — when `scopeKey` changes, the old lease is released
-///   and a new one acquired (v1 kept the stale instance and corrupted the
-///   ref-count of the new key).
-/// - `dispose` — calls `onDispose` and releases the lease; the instance closes
-///   automatically when its last lease is gone.
+/// ## Two tiers of callbacks
+///
+/// - **Per instance** — `onCreate` / `onClose` run *once* for the underlying
+///   bloc, no matter how many widgets share it or how often they remount.
+///   Put your initial `load()` in `onCreate`: it will not double-fire when the
+///   instance is shared or kept warm by `keepAlive`.
+/// - **Per widget** — `onInit` / `onDispose` run every time *this* widget mounts
+///   and unmounts. Use them for widget-scoped side effects (analytics, focus).
+///
+/// ## `scopeKey` and `create`
+///
+/// The instance is keyed by type **plus** `scopeKey`. `create` only runs on the
+/// first acquisition of a given key — **changing the `create` closure does not
+/// recreate the instance**. To get a fresh instance per argument (Riverpod
+/// `family`), vary `scopeKey` (e.g. `scopeKey: 'product-$id'`), not `create`.
+///
+/// `didUpdateWidget` releases the old lease and acquires a new one when
+/// `scopeKey` changes.
 mixin _LeaseStateMixin<W extends StatefulWidget, B extends BlocBase<Object?>> on State<W> {
   String? get scopeKey;
   B Function()? get create;
+  Duration? get keepAlive;
+  void Function(B bloc)? get onCreateCallback;
+  void Function(B bloc)? get onCloseCallback;
   void Function(B bloc)? get onInitCallback;
   void Function(B bloc)? get onDisposeCallback;
 
@@ -30,7 +44,13 @@ mixin _LeaseStateMixin<W extends StatefulWidget, B extends BlocBase<Object?>> on
   }
 
   void _acquire() {
-    _lease = BlocManager.acquire<B>(key: scopeKey, create: create);
+    _lease = BlocManager.acquire<B>(
+      key: scopeKey,
+      create: create,
+      keepAlive: keepAlive,
+      onCreate: onCreateCallback,
+      onClose: onCloseCallback,
+    );
     onInitCallback?.call(bloc);
   }
 
@@ -60,7 +80,7 @@ mixin _LeaseStateMixin<W extends StatefulWidget, B extends BlocBase<Object?>> on
 ///
 /// ```dart
 /// AutoBlocProvider<AuthCubit>(
-///   onInit: (auth) => auth.checkSession(),
+///   onCreate: (auth) => auth.checkSession(), // once per instance
 ///   child: const AppShell(),
 /// )
 /// ```
@@ -68,15 +88,29 @@ class AutoBlocProvider<B extends BlocBase<Object?>> extends StatefulWidget {
   final Widget child;
 
   /// Scope key — multiple independent instances of the same type (family).
+  ///
+  /// Vary this to get one instance per argument; do **not** rely on changing
+  /// [create], which only runs on first acquisition of a given key.
   final String? scopeKey;
 
   /// Inline factory; omit to use the [BlocManager.setFactory] DI factory.
+  /// Only runs on first acquisition of this type+[scopeKey].
   final B Function()? create;
 
-  /// Called once per leased instance, right after acquisition.
+  /// Keeps the instance warm this long after the last lease is released, so a
+  /// quick remount reuses it instead of re-creating.
+  final Duration? keepAlive;
+
+  /// Runs once, when the instance is first created (not on shared/warm reuse).
+  final void Function(B bloc)? onCreate;
+
+  /// Runs once, right before the instance is closed.
+  final void Function(B bloc)? onClose;
+
+  /// Runs every time this widget mounts (per widget, not per instance).
   final void Function(B bloc)? onInit;
 
-  /// Called right before the lease is released.
+  /// Runs every time this widget unmounts (per widget, not per instance).
   final void Function(B bloc)? onDispose;
 
   const AutoBlocProvider({
@@ -84,6 +118,9 @@ class AutoBlocProvider<B extends BlocBase<Object?>> extends StatefulWidget {
     required this.child,
     this.scopeKey,
     this.create,
+    this.keepAlive,
+    this.onCreate,
+    this.onClose,
     this.onInit,
     this.onDispose,
   });
@@ -98,6 +135,12 @@ class _AutoBlocProviderState<B extends BlocBase<Object?>>
   String? get scopeKey => widget.scopeKey;
   @override
   B Function()? get create => widget.create;
+  @override
+  Duration? get keepAlive => widget.keepAlive;
+  @override
+  void Function(B)? get onCreateCallback => widget.onCreate;
+  @override
+  void Function(B)? get onCloseCallback => widget.onClose;
   @override
   void Function(B)? get onInitCallback => widget.onInit;
   @override
@@ -124,7 +167,7 @@ class _AutoBlocProviderState<B extends BlocBase<Object?>>
 ///
 /// ```dart
 /// AutoBlocBuilder<CounterCubit, BaseState<int>>(
-///   onInit: (c) => c.load(),
+///   onCreate: (c) => c.load(),
 ///   builder: (context, cubit, state) => Text('${state.data ?? 0}'),
 /// )
 /// ```
@@ -133,6 +176,9 @@ class AutoBlocBuilder<B extends BlocBase<S>, S> extends StatefulWidget {
   final BlocBuilderCondition<S>? buildWhen;
   final String? scopeKey;
   final B Function()? create;
+  final Duration? keepAlive;
+  final void Function(B bloc)? onCreate;
+  final void Function(B bloc)? onClose;
   final void Function(B bloc)? onInit;
   final void Function(B bloc)? onDispose;
 
@@ -142,6 +188,9 @@ class AutoBlocBuilder<B extends BlocBase<S>, S> extends StatefulWidget {
     this.buildWhen,
     this.scopeKey,
     this.create,
+    this.keepAlive,
+    this.onCreate,
+    this.onClose,
     this.onInit,
     this.onDispose,
   });
@@ -156,6 +205,12 @@ class _AutoBlocBuilderState<B extends BlocBase<S>, S>
   String? get scopeKey => widget.scopeKey;
   @override
   B Function()? get create => widget.create;
+  @override
+  Duration? get keepAlive => widget.keepAlive;
+  @override
+  void Function(B)? get onCreateCallback => widget.onCreate;
+  @override
+  void Function(B)? get onCloseCallback => widget.onClose;
   @override
   void Function(B)? get onInitCallback => widget.onInit;
   @override
@@ -194,6 +249,9 @@ class AutoBlocListener<B extends BlocBase<S>, S> extends StatefulWidget {
   final Widget child;
   final String? scopeKey;
   final B Function()? create;
+  final Duration? keepAlive;
+  final void Function(B bloc)? onCreate;
+  final void Function(B bloc)? onClose;
   final void Function(B bloc)? onInit;
   final void Function(B bloc)? onDispose;
 
@@ -204,6 +262,9 @@ class AutoBlocListener<B extends BlocBase<S>, S> extends StatefulWidget {
     this.listenWhen,
     this.scopeKey,
     this.create,
+    this.keepAlive,
+    this.onCreate,
+    this.onClose,
     this.onInit,
     this.onDispose,
   });
@@ -218,6 +279,12 @@ class _AutoBlocListenerState<B extends BlocBase<S>, S>
   String? get scopeKey => widget.scopeKey;
   @override
   B Function()? get create => widget.create;
+  @override
+  Duration? get keepAlive => widget.keepAlive;
+  @override
+  void Function(B)? get onCreateCallback => widget.onCreate;
+  @override
+  void Function(B)? get onCloseCallback => widget.onClose;
   @override
   void Function(B)? get onInitCallback => widget.onInit;
   @override
@@ -255,6 +322,9 @@ class AutoBlocConsumer<B extends BlocBase<S>, S> extends StatefulWidget {
   final BlocListenerCondition<S>? listenWhen;
   final String? scopeKey;
   final B Function()? create;
+  final Duration? keepAlive;
+  final void Function(B bloc)? onCreate;
+  final void Function(B bloc)? onClose;
   final void Function(B bloc)? onInit;
   final void Function(B bloc)? onDispose;
 
@@ -266,6 +336,9 @@ class AutoBlocConsumer<B extends BlocBase<S>, S> extends StatefulWidget {
     this.listenWhen,
     this.scopeKey,
     this.create,
+    this.keepAlive,
+    this.onCreate,
+    this.onClose,
     this.onInit,
     this.onDispose,
   });
@@ -280,6 +353,12 @@ class _AutoBlocConsumerState<B extends BlocBase<S>, S>
   String? get scopeKey => widget.scopeKey;
   @override
   B Function()? get create => widget.create;
+  @override
+  Duration? get keepAlive => widget.keepAlive;
+  @override
+  void Function(B)? get onCreateCallback => widget.onCreate;
+  @override
+  void Function(B)? get onCloseCallback => widget.onClose;
   @override
   void Function(B)? get onInitCallback => widget.onInit;
   @override
@@ -324,6 +403,9 @@ class AutoBlocSelector<B extends BlocBase<S>, S, V> extends StatefulWidget {
   final Widget Function(BuildContext context, V value) builder;
   final String? scopeKey;
   final B Function()? create;
+  final Duration? keepAlive;
+  final void Function(B bloc)? onCreate;
+  final void Function(B bloc)? onClose;
   final void Function(B bloc)? onInit;
   final void Function(B bloc)? onDispose;
 
@@ -333,6 +415,9 @@ class AutoBlocSelector<B extends BlocBase<S>, S, V> extends StatefulWidget {
     required this.builder,
     this.scopeKey,
     this.create,
+    this.keepAlive,
+    this.onCreate,
+    this.onClose,
     this.onInit,
     this.onDispose,
   });
@@ -348,6 +433,12 @@ class _AutoBlocSelectorState<B extends BlocBase<S>, S, V>
   String? get scopeKey => widget.scopeKey;
   @override
   B Function()? get create => widget.create;
+  @override
+  Duration? get keepAlive => widget.keepAlive;
+  @override
+  void Function(B)? get onCreateCallback => widget.onCreate;
+  @override
+  void Function(B)? get onCloseCallback => widget.onClose;
   @override
   void Function(B)? get onInitCallback => widget.onInit;
   @override

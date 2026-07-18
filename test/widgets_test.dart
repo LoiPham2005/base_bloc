@@ -167,6 +167,108 @@ void main() {
     });
   });
 
+  group('per-instance lifecycle hooks', () {
+    testWidgets('onCreate fires once per instance even when shared', (tester) async {
+      var creates = 0;
+      Widget both() => MaterialApp(
+            home: Column(
+              children: [
+                AutoBlocBuilder<LabelCubit, BaseState<String>>(
+                  create: () => LabelCubit('x'),
+                  onCreate: (_) => creates++,
+                  builder: (context, cubit, state) => Text('1:${state.data}'),
+                ),
+                AutoBlocBuilder<LabelCubit, BaseState<String>>(
+                  create: () => LabelCubit('x'),
+                  onCreate: (_) => creates++,
+                  builder: (context, cubit, state) => Text('2:${state.data}'),
+                ),
+              ],
+            ),
+          );
+
+      await tester.pumpWidget(both());
+      expect(creates, 1); // one shared instance → onCreate once, not per widget
+    });
+
+    testWidgets('onInit fires per widget mount (contrast with onCreate)',
+        (tester) async {
+      var inits = 0;
+      await tester.pumpWidget(MaterialApp(
+        home: Column(
+          children: [
+            AutoBlocBuilder<LabelCubit, BaseState<String>>(
+              create: () => LabelCubit('x'),
+              onInit: (_) => inits++,
+              builder: (context, cubit, state) => Text('1:${state.data}'),
+            ),
+            AutoBlocBuilder<LabelCubit, BaseState<String>>(
+              create: () => LabelCubit('x'),
+              onInit: (_) => inits++,
+              builder: (context, cubit, state) => Text('2:${state.data}'),
+            ),
+          ],
+        ),
+      ));
+      expect(inits, 2); // one per widget, even though the instance is shared
+    });
+
+    testWidgets('onClose fires once when the instance actually closes',
+        (tester) async {
+      var closes = 0;
+      await tester.pumpWidget(MaterialApp(
+        home: AutoBlocProvider<LabelCubit>(
+          create: () => LabelCubit('x'),
+          onClose: (_) => closes++,
+          child: const SizedBox(),
+        ),
+      ));
+      expect(closes, 0);
+
+      await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+      expect(closes, 1); // no keepAlive → closes on unmount
+    });
+  });
+
+  group('widget keepAlive', () {
+    Widget provider(String label, Duration keepAlive) => MaterialApp(
+          home: AutoBlocProvider<LabelCubit>(
+            create: () => LabelCubit(label),
+            keepAlive: keepAlive,
+            child: const SizedBox(),
+          ),
+        );
+
+    testWidgets('keeps the instance warm after unmount, closes after the TTL',
+        (tester) async {
+      await tester.pumpWidget(provider('x', const Duration(seconds: 30)));
+      final cubit = BlocManager.peek<LabelCubit>()!;
+
+      await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+      expect(cubit.isClosed, isFalse); // warm, not closed
+
+      await tester.pump(const Duration(seconds: 31));
+      expect(cubit.isClosed, isTrue); // closed after grace period
+    });
+
+    testWidgets('remount within the window reuses the warm instance',
+        (tester) async {
+      await tester.pumpWidget(provider('x', const Duration(seconds: 30)));
+      final cubit = BlocManager.peek<LabelCubit>()!;
+
+      await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+      await tester.pump(const Duration(seconds: 5)); // still within window
+
+      await tester.pumpWidget(provider('y', const Duration(seconds: 30)));
+      expect(identical(BlocManager.peek<LabelCubit>(), cubit), isTrue);
+      expect(cubit.state.data, 'x'); // create('y') was ignored — instance reused
+
+      // Clean up so no timer stays pending.
+      await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+      await tester.pump(const Duration(seconds: 31));
+    });
+  });
+
   group('UiMessageListener', () {
     testWidgets('delivers identical consecutive messages (REGRESSION v1)',
         (tester) async {

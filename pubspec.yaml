@@ -1,10 +1,9 @@
 name: smart_bloc
-description: >
-  A powerful, codegen-free BLoC/Cubit layer for Flutter: sealed BaseState,
-  SmartCubit/SmartBloc with stale-result protection and one-shot UI effects,
-  generation-safe ref-counted lifecycle (BlocManager), and batteries-included
-  widgets — autoDispose and family ergonomics without build_runner.
-version: 0.3.0
+description: >-
+  Codegen-free BLoC/Cubit layer for Flutter: sealed async state, query/mutate
+  with stale-result protection, one-shot UI effects, and ref-counted
+  autoDispose lifecycle.
+version: 0.3.1
 homepage: https://github.com/LoiPham2005/base_bloc
 repository: https://github.com/LoiPham2005/base_bloc
 issue_tracker: https://github.com/LoiPham2005/base_bloc/issues

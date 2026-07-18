@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1
+
+- Shorten the pubspec `description` to fit pub.dev's 60–180 character range
+  (full pub points). No code changes.
+
 ## 0.3.0
 
 Closes the practical gaps vs Riverpod codegen — all without a build step.
